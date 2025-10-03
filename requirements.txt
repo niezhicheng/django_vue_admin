@@ -1,0 +1,17 @@
+# Django Vue Admin - Python依赖列表
+
+# 核心框架
+Django>=4.2.0,<5.0
+djangorestframework>=3.14.0
+
+# 权限管理
+casbin>=1.25.0
+
+# JWT认证
+djangorestframework-simplejwt>=5.5.0
+
+# CORS支持
+django-cors-headers>=4.0.0
+
+# 开发工具
+requests>=2.31.0  # API测试用
