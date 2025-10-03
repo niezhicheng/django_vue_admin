@@ -23,6 +23,31 @@ class MenuSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
+    def create(self, validated_data):
+        """创建菜单时处理parent字段"""
+        parent_id = self.initial_data.get('parent')
+        if parent_id:
+            try:
+                parent_menu = Menu.objects.get(id=parent_id)
+                validated_data['parent'] = parent_menu
+            except Menu.DoesNotExist:
+                pass
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        """更新菜单时处理parent字段"""
+        parent_id = self.initial_data.get('parent')
+        if parent_id is not None:
+            if parent_id:
+                try:
+                    parent_menu = Menu.objects.get(id=parent_id)
+                    validated_data['parent'] = parent_menu
+                except Menu.DoesNotExist:
+                    pass
+            else:
+                validated_data['parent'] = None
+        return super().update(instance, validated_data)
+    
     def get_breadcrumb(self, obj):
         """获取面包屑导航"""
         breadcrumb = [obj.title]

@@ -94,6 +94,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
                 # 同步到Casbin
                 role = UserRole.objects.get(user=user, role_id=role_id).role
                 simple_rbac_manager.add_user_role(user.username, role.role_id)
+            
+            # 用户创建后，重新加载权限策略
+            simple_rbac_manager.reload_policies()
         
         return user
 

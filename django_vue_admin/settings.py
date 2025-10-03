@@ -53,7 +53,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'rbac.simple_rbac.SimpleRBACMiddleware',
 ]
 
 ROOT_URLCONF = 'django_vue_admin.urls'

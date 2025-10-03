@@ -70,13 +70,6 @@ class RoleViewSet(viewsets.ModelViewSet):
         
         # 删除现有权限
         from ..models import PolicyRule
-        from ..simple_rbac import simple_rbac_manager
-        
-        # 先获取现有权限，然后同步删除到Casbin
-        existing_policies = PolicyRule.objects.filter(role_id=role.role_id)
-        for policy in existing_policies:
-            # 同步删除到Casbin
-            simple_rbac_manager.sync_policy_to_casbin(role.role_id, policy.path, policy.method, 'remove')
         
         # 删除数据库中的权限
         PolicyRule.objects.filter(role_id=role.role_id).delete()
@@ -86,18 +79,12 @@ class RoleViewSet(viewsets.ModelViewSet):
         for api_id in api_ids:
             try:
                 api = Api.objects.get(id=api_id)
-                # 先保存到数据库
                 PolicyRule.objects.create(
                     role_id=role.role_id,
                     path=api.path,
                     method=api.method
                 )
-                # 同步到Casbin
-                simple_rbac_manager.sync_policy_to_casbin(role.role_id, api.path, api.method, 'add')
             except Api.DoesNotExist:
                 continue
-        
-        # 权限更新后，强制重新加载Casbin权限策略
-        simple_rbac_manager.reload_policies()
         
         return ApiResponse.success(message="API权限分配成功")

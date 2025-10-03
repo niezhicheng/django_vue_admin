@@ -21,6 +21,36 @@ class DepartmentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
+    def create(self, validated_data):
+        """创建部门时处理parent字段"""
+        parent_id = self.initial_data.get('parent')
+        if parent_id:
+            try:
+                parent_dept = Department.objects.get(id=parent_id)
+                validated_data['parent'] = parent_dept
+                # 自动设置层级
+                validated_data['level'] = parent_dept.level + 1
+            except Department.DoesNotExist:
+                pass
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        """更新部门时处理parent字段"""
+        parent_id = self.initial_data.get('parent')
+        if parent_id is not None:
+            if parent_id:
+                try:
+                    parent_dept = Department.objects.get(id=parent_id)
+                    validated_data['parent'] = parent_dept
+                    # 自动设置层级
+                    validated_data['level'] = parent_dept.level + 1
+                except Department.DoesNotExist:
+                    pass
+            else:
+                validated_data['parent'] = None
+                validated_data['level'] = 1
+        return super().update(instance, validated_data)
+    
     def get_children_count(self, obj):
         """获取子部门数量"""
         return obj.children.count()
