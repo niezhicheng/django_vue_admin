@@ -22,11 +22,11 @@ urlpatterns = [
     
     # 角色API权限管理
     path('api/roles/<int:role_id>/get_api_permissions/', get_role_api_permissions, name='role-get-api-permissions'),
-    path('api/roles/<int:pk>/assign_api_permissions/', assign_role_api_permissions, name='role-assign-api-permissions'),
+    path('api/roles/<int:role_id>/assign_api_permissions/', assign_role_api_permissions, name='role-assign-api-permissions'),
     
     # 角色菜单权限管理
     path('api/roles/<int:role_id>/get_menu_permissions/', get_role_menu_permissions, name='role-get-menu-permissions'),
-    path('api/roles/<int:pk>/assign_menu_permissions/', assign_role_menu_permissions, name='role-assign-menu-permissions'),
+    path('api/roles/<int:role_id>/assign_menu_permissions/', assign_role_menu_permissions, name='role-assign-menu-permissions'),
     
     # JWT认证相关
     path('auth/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),

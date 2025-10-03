@@ -13,6 +13,7 @@ from ..serializers import (
 )
 from ..utils import ApiResponse
 from ..models import DataPermissionManager
+from ..permissions import CasbinPermission
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -22,6 +23,7 @@ class UserViewSet(viewsets.ModelViewSet):
     create_serializer_class = UserCreateSerializer
     update_serializer_class = UserUpdateSerializer
     detail_serializer_class = UserDetailSerializer
+    permission_classes = [CasbinPermission]
     
     def get_serializer_class(self):
         """根据动作返回不同的序列化器"""

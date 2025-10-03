@@ -11,12 +11,14 @@ from ..serializers import (
     RoleUpdateSerializer
 )
 from ..utils import ApiResponse
+from ..permissions import CasbinPermission
 
 
 class RoleViewSet(viewsets.ModelViewSet):
     """角色管理视图集"""
     queryset = Role.objects.all()
     serializer_class = RoleListSerializer
+    permission_classes = [CasbinPermission]
     
     def get_serializer_class(self):
         """根据动作返回不同的序列化器"""

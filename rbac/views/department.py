@@ -9,12 +9,14 @@ from ..models import Department
 from ..serializers import DepartmentSerializer
 from ..utils import ApiResponse
 from ..models import DataPermissionManager
+from ..permissions import CasbinPermission
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):
     """部门管理视图集"""
     model = Department
     serializer_class = DepartmentSerializer
+    permission_classes = [CasbinPermission]
     
     def get_queryset(self):
         """获取部门查询集"""

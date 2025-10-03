@@ -22,29 +22,38 @@ class SimpleRBACManager:
     def get_enforcer(self):
         """获取Casbin enforcer实例"""
         if self._enforcer is None:
-            # 使用内存适配器，策略直接写在代码中
+            # 使用内存适配器，启动时从数据库加载
+            from django.conf import settings
             self._enforcer = casbin.Enforcer(str(settings.CASBIN_URL_MODEL))
+            
+            # 从数据库加载策略到内存
+            self._load_policies_from_db()
         return self._enforcer
     
-    def _load_policies(self):
-        """加载权限策略"""
-        # 确保enforcer已初始化
+    def _load_policies_from_db(self):
+        """从数据库加载权限策略到Casbin内存"""
         enforcer = self.get_enforcer()
         
-        # 获取权限策略
-        policies = self._get_policies_from_config()
+        # 清空现有策略
+        enforcer.clear_policy()
         
-        # 如果没有配置策略，使用默认策略
-        if not policies:
-            policies = self._get_default_policies()
+        # 1. 加载权限策略
+        from .models import PolicyRule
+        policy_rules = PolicyRule.objects.all()
+        for rule in policy_rules:
+            enforcer.add_policy(rule.role_id, rule.path, rule.method)
         
-        # 添加策略
-        for policy in policies:
-            if not enforcer.has_policy(*policy):
-                enforcer.add_policy(*policy)
-        
-        # 添加用户角色绑定（从数据库读取）
-        self._load_user_roles()
+        # 2. 加载用户角色绑定
+        from .models import UserRole
+        user_roles = UserRole.objects.select_related('user', 'role').filter(
+            role__is_active=True
+        )
+        for user_role in user_roles:
+            enforcer.add_grouping_policy(user_role.user.username, user_role.role.role_id)
+    
+    def _load_policies(self):
+        """加载权限策略（保持向后兼容）"""
+        self._load_policies_from_db()
     
     def _get_policies_from_config(self):
         """从配置和数据库获取权限策略"""
@@ -119,17 +128,13 @@ class SimpleRBACManager:
     
     def _normalize_url(self, url_path):
         """标准化URL路径"""
-        # 移除开头的斜杠
-        if url_path.startswith('/'):
-            url_path = url_path[1:]
-        
-        # 移除结尾的斜杠
-        if url_path.endswith('/'):
-            url_path = url_path[:-1]
-        
-        # 添加开头的斜杠
+        # 确保以斜杠开头
         if not url_path.startswith('/'):
             url_path = '/' + url_path
+        
+        # 对于API路径，保持结尾的斜杠以匹配权限策略
+        if url_path.startswith('/rbac/api/') and not url_path.endswith('/'):
+            url_path = url_path + '/'
         
         return url_path
     
@@ -148,52 +153,108 @@ class SimpleRBACManager:
         enforcer = self.get_enforcer()
         return enforcer.get_roles_for_user(username)
     
-    def add_user_role(self, username, role_code):
+    def add_user_role(self, username, role_id, save_to_db=True):
         """为用户添加角色"""
-        enforcer = self.get_enforcer()
-        return enforcer.add_grouping_policy(username, role_code)
+        if save_to_db:
+            # 先保存到数据库
+            from .models import User, Role, UserRole
+            try:
+                user = User.objects.get(username=username)
+                role = Role.objects.get(role_id=role_id)
+                user_role, created = UserRole.objects.get_or_create(user=user, role=role)
+                if created:
+                    # 同步到Casbin内存
+                    self.sync_user_role_to_casbin(username, role_id, 'add')
+                    return True
+                return False
+            except (User.DoesNotExist, Role.DoesNotExist):
+                return False
+        else:
+            # 只添加到Casbin内存
+            enforcer = self.get_enforcer()
+            return enforcer.add_grouping_policy(username, role_id)
     
-    def remove_user_role(self, username, role_code):
+    def remove_user_role(self, username, role_id, remove_from_db=True):
         """删除用户角色"""
-        enforcer = self.get_enforcer()
-        return enforcer.remove_grouping_policy(username, role_code)
+        if remove_from_db:
+            # 先从数据库删除
+            from .models import User, Role, UserRole
+            try:
+                user = User.objects.get(username=username)
+                role = Role.objects.get(role_id=role_id)
+                deleted_count = UserRole.objects.filter(user=user, role=role).delete()[0]
+                if deleted_count > 0:
+                    # 同步到Casbin内存
+                    self.sync_user_role_to_casbin(username, role_id, 'remove')
+                    return True
+                return False
+            except (User.DoesNotExist, Role.DoesNotExist):
+                return False
+        else:
+            # 只从Casbin内存删除
+            enforcer = self.get_enforcer()
+            return enforcer.remove_grouping_policy(username, role_id)
     
     def reload_policies(self):
         """重新加载策略"""
-        self._load_policies()
+        self._load_policies_from_db()
+    
+    def sync_policy_to_casbin(self, role_id, path, method, action='add'):
+        """同步单个权限策略到Casbin内存"""
+        enforcer = self.get_enforcer()
+        if action == 'add':
+            enforcer.add_policy(role_id, path, method)
+        elif action == 'remove':
+            enforcer.remove_policy(role_id, path, method)
+    
+    def sync_user_role_to_casbin(self, username, role_id, action='add'):
+        """同步用户角色绑定到Casbin内存"""
+        enforcer = self.get_enforcer()
+        if action == 'add':
+            enforcer.add_grouping_policy(username, role_id)
+        elif action == 'remove':
+            enforcer.remove_grouping_policy(username, role_id)
     
     def add_role_policy(self, role_id, url_pattern, method, save_to_db=True):
         """为角色添加权限策略"""
-        enforcer = self.get_enforcer()
-        success = enforcer.add_policy(role_id, url_pattern, method.upper())
-        
-        if success and save_to_db:
-            # 保存到数据库
+        if save_to_db:
+            # 先保存到数据库
             from .models import PolicyRule
-            PolicyRule.objects.get_or_create(
+            policy, created = PolicyRule.objects.get_or_create(
                 role_id=role_id,
-                url_pattern=url_pattern,
-                method=method.upper(),
-                defaults={'is_active': True}
+                path=url_pattern,
+                method=method.upper()
             )
-        
-        return success
+            if created:
+                # 同步到Casbin内存
+                self.sync_policy_to_casbin(role_id, url_pattern, method.upper(), 'add')
+                return True
+            return False
+        else:
+            # 只添加到Casbin内存
+            enforcer = self.get_enforcer()
+            return enforcer.add_policy(role_id, url_pattern, method.upper())
     
     def remove_role_policy(self, role_id, url_pattern, method, remove_from_db=True):
         """删除角色权限策略"""
-        enforcer = self.get_enforcer()
-        success = enforcer.remove_policy(role_id, url_pattern, method.upper())
-        
-        if success and remove_from_db:
-            # 从数据库删除
+        if remove_from_db:
+            # 先从数据库删除
             from .models import PolicyRule
-            PolicyRule.objects.filter(
+            deleted_count = PolicyRule.objects.filter(
                 role_id=role_id,
-                url_pattern=url_pattern,
+                path=url_pattern,
                 method=method.upper()
-            ).delete()
-        
-        return success
+            ).delete()[0]
+            
+            if deleted_count > 0:
+                # 同步到Casbin内存
+                self.sync_policy_to_casbin(role_id, url_pattern, method.upper(), 'remove')
+                return True
+            return False
+        else:
+            # 只从Casbin内存删除
+            enforcer = self.get_enforcer()
+            return enforcer.remove_policy(role_id, url_pattern, method.upper())
     
     def get_role_policies(self, role_id):
         """获取角色的所有权限策略"""
@@ -236,9 +297,13 @@ class SimpleRBACMiddleware:
             '/admin/',
             '/rbac/auth/login/',
             '/rbac/auth/logout/',
+            '/rbac/auth/profile/',
+            '/rbac/auth/user-menus/',
             '/static/',
             '/media/',
-            '/',
+            '/rbac/auth/token/',  # JWT token相关
+            '/rbac/auth/token/refresh/',
+            '/rbac/auth/token/verify/',
         ]
     
     def __call__(self, request):
@@ -260,17 +325,37 @@ class SimpleRBACMiddleware:
             if path.startswith(exempt_url):
                 return False
         
+        # 跳过DRF API视图，让DRF自己的认证和权限系统处理
+        if path.startswith('/rbac/api/') or path.startswith('/business_demo/api/'):
+            return False
+        
         return True
     
     def _check_permission(self, request):
+        print(f"权限检查: {request.method} {request.path_info}")
+        print(f"用户: {request.user}")
+        print(f"是否认证: {request.user.is_authenticated if request.user else False}")
+        print(f"是否超级用户: {request.user.is_superuser if request.user else False}")
+        
         """检查权限"""
         # 检查用户是否登录
         if not request.user or not request.user.is_authenticated:
+            print("权限检查失败: 用户未登录")
             return False
         
         # 超级用户拥有所有权限
         if request.user.is_superuser:
+            print("权限检查通过: 超级用户")
             return True
+        
+        # 确保权限策略已加载
+        try:
+            enforcer = simple_rbac_manager.get_enforcer()
+            if not enforcer.get_policy():
+                # 如果权限策略为空，重新加载
+                simple_rbac_manager.reload_policies()
+        except:
+            pass
         
         # 使用简化的RBAC检查权限
         return simple_rbac_manager.check_permission(

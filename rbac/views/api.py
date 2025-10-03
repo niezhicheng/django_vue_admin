@@ -8,12 +8,14 @@ from rest_framework.response import Response
 from ..models import ApiGroup, Api
 from ..serializers import ApiGroupSerializer, ApiSerializer
 from ..utils import ApiResponse
+from ..permissions import CasbinPermission
 
 
 class ApiGroupViewSet(viewsets.ModelViewSet):
     """API分组管理视图集"""
     model = ApiGroup
     serializer_class = ApiGroupSerializer
+    permission_classes = [CasbinPermission]
     
     def get_queryset(self):
         """获取API分组查询集"""
@@ -24,6 +26,7 @@ class ApiViewSet(viewsets.ModelViewSet):
     """API管理视图集"""
     model = Api
     serializer_class = ApiSerializer
+    permission_classes = [CasbinPermission]
     
     def get_queryset(self):
         """获取API查询集"""

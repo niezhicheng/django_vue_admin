@@ -8,16 +8,21 @@ from rest_framework.response import Response
 from ..models import Menu
 from ..serializers import MenuSerializer
 from ..utils import ApiResponse
+from ..permissions import CasbinPermission
 
 
 class MenuViewSet(viewsets.ModelViewSet):
     """菜单管理视图集"""
     model = Menu
     serializer_class = MenuSerializer
+    permission_classes = [CasbinPermission]
     
     def get_queryset(self):
-        """获取菜单查询集"""
-        return Menu.objects.filter(status=True).order_by('sort_order', 'created_at')
+        """获取菜单查询集 - 只返回菜单和目录类型，不包含按钮"""
+        return Menu.objects.filter(
+            status=True,
+            menu_type__in=[1, 2]  # 1=目录, 2=菜单, 3=按钮
+        ).order_by('sort_order', 'created_at')
     
     @action(detail=False, methods=['get'])
     def tree(self, request):
