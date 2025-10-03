@@ -30,7 +30,7 @@ class UserListSerializer(serializers.ModelSerializer):
     
     def get_roles(self, obj):
         """获取用户角色"""
-        return [{'id': ur.role.id, 'name': ur.role.name, 'code': ur.role.code} 
+        return [{'id': ur.role.id, 'name': ur.role.name, 'code': ur.role.code, 'data_scope': ur.role.data_scope} 
                 for ur in obj.userrole_set.select_related('role').all()]
 
 
@@ -49,7 +49,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
     
     def get_roles(self, obj):
         """获取用户角色详细信息"""
-        return [{'id': ur.role.id, 'name': ur.role.name, 'code': ur.role.code, 'description': ur.role.description} 
+        return [{'id': ur.role.id, 'name': ur.role.name, 'code': ur.role.code, 'description': ur.role.description, 'data_scope': ur.role.data_scope} 
                 for ur in obj.userrole_set.select_related('role').all()]
 
 

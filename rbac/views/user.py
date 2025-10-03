@@ -85,7 +85,7 @@ class UserViewSet(viewsets.ModelViewSet):
         else:
             return ApiResponse.error(message="密码重置失败", data=serializer.errors)
     
-    @action(detail=True, methods=['post'], url_path='set-custom-scope')
+    @action(detail=True, methods=['post'], url_path='set_custom_scope')
     def set_custom_scope(self, request, pk=None):
         """设置用户自定义数据权限"""
         user = self.get_object()
