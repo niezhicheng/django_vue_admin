@@ -124,10 +124,30 @@ class SimpleRBACManager:
         
         # 使用Casbin检查权限
         enforcer = self.get_enforcer()
-        return enforcer.enforce(user.username, normalized_url, method.upper())
+        result = enforcer.enforce(user.username, normalized_url, method.upper())
+        
+        # 调试信息
+        print(f"[DEBUG] 权限检查: 用户={user.username}, 路径={normalized_url}, 方法={method.upper()}, 结果={result}")
+        
+        # 检查用户角色
+        user_roles = enforcer.get_roles_for_user(user.username)
+        print(f"[DEBUG] 用户角色: {user_roles}")
+        
+        # 检查角色权限
+        for role in user_roles:
+            role_policies = [p for p in enforcer.get_policy() if p[0] == role]
+            print(f"[DEBUG] 角色{role}的权限数量: {len(role_policies)}")
+            for policy in role_policies[:3]:  # 只显示前3个
+                print(f"[DEBUG]   {policy}")
+        
+        return result
     
     def _normalize_url(self, url_path):
         """标准化URL路径"""
+        # 移除查询参数
+        if '?' in url_path:
+            url_path = url_path.split('?')[0]
+        
         # 确保以斜杠开头
         if not url_path.startswith('/'):
             url_path = '/' + url_path

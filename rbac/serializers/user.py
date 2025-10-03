@@ -88,8 +88,12 @@ class UserCreateSerializer(serializers.ModelSerializer):
         
         # 分配角色
         if roles_data:
+            from ..simple_rbac import simple_rbac_manager
             for role_id in roles_data:
                 UserRole.objects.create(user=user, role_id=role_id)
+                # 同步到Casbin
+                role = UserRole.objects.get(user=user, role_id=role_id).role
+                simple_rbac_manager.add_user_role(user.username, role.role_id)
         
         return user
 
@@ -116,11 +120,20 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         
         # 更新角色
         if roles_data is not None:
-            # 删除现有角色
+            from ..simple_rbac import simple_rbac_manager
+            from ..models import Role
+            
+            # 删除现有角色（先同步到Casbin）
+            for user_role in instance.userrole_set.all():
+                simple_rbac_manager.remove_user_role(instance.username, user_role.role.role_id)
             instance.userrole_set.all().delete()
+            
             # 添加新角色
             for role_id in roles_data:
                 UserRole.objects.create(user=instance, role_id=role_id)
+                # 同步到Casbin
+                role = Role.objects.get(id=role_id)
+                simple_rbac_manager.add_user_role(instance.username, role.role_id)
         
         return instance
 

@@ -467,10 +467,135 @@ class Command(BaseCommand):
                 created_count += 1
                 self.stdout.write(f'创建权限策略: {actual_role_id} -> {method} {url_pattern}')
         
+        # 为admin角色添加完整的API权限
+        self.init_admin_permissions()
+        
         if created_count > 0:
             self.stdout.write(f'成功创建 {created_count} 条权限策略')
-        else:
-            self.stdout.write('权限策略已存在，无需创建')
+    
+    def init_admin_permissions(self):
+        """为admin角色添加完整的API权限"""
+        from rbac.models import User, Role, UserRole
+        
+        # 确保admin用户存在且为超级用户
+        admin_user, created = User.objects.get_or_create(
+            username='admin',
+            defaults={
+                'email': 'admin@example.com',
+                'first_name': '系统',
+                'last_name': '管理员',
+                'is_superuser': True,
+                'is_staff': True,
+                'is_active': True
+            }
+        )
+        
+        if not created:
+            # 如果用户已存在，确保是超级用户
+            admin_user.is_superuser = True
+            admin_user.is_staff = True
+            admin_user.is_active = True
+            admin_user.save()
+        
+        # 设置admin用户密码
+        admin_user.set_password('admin123')
+        admin_user.save()
+        
+        # 获取admin角色
+        admin_role = Role.objects.get(code='admin')
+        
+        # 为admin用户分配超级管理员角色
+        UserRole.objects.get_or_create(user=admin_user, role=admin_role)
+        self.stdout.write('为admin用户分配超级管理员角色')
+        
+        # 为admin角色添加所有API权限
+        api_permissions = [
+            # 用户管理API
+            ('/rbac/api/users/', 'GET'),
+            ('/rbac/api/users/', 'POST'),
+            ('/rbac/api/users/{id}/', 'GET'),
+            ('/rbac/api/users/{id}/', 'PUT'),
+            ('/rbac/api/users/{id}/', 'DELETE'),
+            ('/rbac/api/users/{id}/reset-password/', 'POST'),
+            ('/rbac/api/users/{id}/set_custom_scope/', 'POST'),
+            
+            # 角色管理API
+            ('/rbac/api/roles/', 'GET'),
+            ('/rbac/api/roles/', 'POST'),
+            ('/rbac/api/roles/{id}/', 'GET'),
+            ('/rbac/api/roles/{id}/', 'PUT'),
+            ('/rbac/api/roles/{id}/', 'DELETE'),
+            ('/rbac/api/roles/{id}/get-api-permissions/', 'GET'),
+            ('/rbac/api/roles/{id}/assign-api-permissions/', 'POST'),
+            ('/rbac/api/roles/{id}/get-menu-permissions/', 'GET'),
+            ('/rbac/api/roles/{id}/assign-menu-permissions/', 'POST'),
+            
+            # 部门管理API
+            ('/rbac/api/departments/', 'GET'),
+            ('/rbac/api/departments/', 'POST'),
+            ('/rbac/api/departments/{id}/', 'GET'),
+            ('/rbac/api/departments/{id}/', 'PUT'),
+            ('/rbac/api/departments/{id}/', 'DELETE'),
+            ('/rbac/api/departments/tree/', 'GET'),
+            ('/rbac/api/departments/{id}/children/', 'GET'),
+            
+            # 菜单管理API
+            ('/rbac/api/menus/', 'GET'),
+            ('/rbac/api/menus/', 'POST'),
+            ('/rbac/api/menus/{id}/', 'GET'),
+            ('/rbac/api/menus/{id}/', 'PUT'),
+            ('/rbac/api/menus/{id}/', 'DELETE'),
+            ('/rbac/api/menus/tree/', 'GET'),
+            
+            # API管理API
+            ('/rbac/api/api-groups/', 'GET'),
+            ('/rbac/api/api-groups/', 'POST'),
+            ('/rbac/api/api-groups/{id}/', 'GET'),
+            ('/rbac/api/api-groups/{id}/', 'PUT'),
+            ('/rbac/api/api-groups/{id}/', 'DELETE'),
+            ('/rbac/api/apis/', 'GET'),
+            ('/rbac/api/apis/', 'POST'),
+            ('/rbac/api/apis/{id}/', 'GET'),
+            ('/rbac/api/apis/{id}/', 'PUT'),
+            ('/rbac/api/apis/{id}/', 'DELETE'),
+            
+            # 认证相关API
+            ('/rbac/auth/profile/', 'GET'),
+            ('/rbac/auth/user-menus/', 'GET'),
+            ('/rbac/auth/token/', 'POST'),
+            ('/rbac/auth/token/refresh/', 'POST'),
+            ('/rbac/auth/token/verify/', 'POST'),
+            
+            # 业务管理API
+            ('/business_demo/api/articles/', 'GET'),
+            ('/business_demo/api/articles/', 'POST'),
+            ('/business_demo/api/articles/{id}/', 'GET'),
+            ('/business_demo/api/articles/{id}/', 'PUT'),
+            ('/business_demo/api/articles/{id}/', 'DELETE'),
+            ('/business_demo/api/projects/', 'GET'),
+            ('/business_demo/api/projects/', 'POST'),
+            ('/business_demo/api/projects/{id}/', 'GET'),
+            ('/business_demo/api/projects/{id}/', 'PUT'),
+            ('/business_demo/api/projects/{id}/', 'DELETE'),
+            ('/business_demo/api/documents/', 'GET'),
+            ('/business_demo/api/documents/', 'POST'),
+            ('/business_demo/api/documents/{id}/', 'GET'),
+            ('/business_demo/api/documents/{id}/', 'PUT'),
+            ('/business_demo/api/documents/{id}/', 'DELETE'),
+            ('/business_demo/api/tasks/', 'GET'),
+            ('/business_demo/api/tasks/', 'POST'),
+            ('/business_demo/api/tasks/{id}/', 'GET'),
+            ('/business_demo/api/tasks/{id}/', 'PUT'),
+            ('/business_demo/api/tasks/{id}/', 'DELETE'),
+        ]
+        
+        admin_permissions_count = 0
+        for path, method in api_permissions:
+            success = simple_rbac_manager.add_role_policy(admin_role.role_id, path, method)
+            if success:
+                admin_permissions_count += 1
+        
+        self.stdout.write(f'为admin角色添加了 {admin_permissions_count} 个API权限')
 
     def test_permissions(self):
         """测试权限"""
@@ -554,34 +679,98 @@ class Command(BaseCommand):
             {'name': '获取用户信息', 'path': '/rbac/auth/profile/', 'method': 'GET', 'group': system_group, 'description': '获取当前用户信息'},
             {'name': '用户登录', 'path': '/rbac/auth/token/', 'method': 'POST', 'group': system_group, 'description': '用户登录获取token'},
             {'name': '刷新Token', 'path': '/rbac/auth/token/refresh/', 'method': 'POST', 'group': system_group, 'description': '刷新访问token'},
+            {'name': '验证Token', 'path': '/rbac/auth/token/verify/', 'method': 'POST', 'group': system_group, 'description': '验证token有效性'},
             {'name': '用户登出', 'path': '/rbac/auth/logout/', 'method': 'POST', 'group': system_group, 'description': '用户登出'},
+            {'name': '获取用户菜单', 'path': '/rbac/auth/user-menus/', 'method': 'GET', 'group': system_group, 'description': '获取用户菜单树'},
             
             # 用户管理API
             {'name': '获取用户列表', 'path': '/rbac/api/users/', 'method': 'GET', 'group': user_group, 'description': '获取用户列表'},
             {'name': '创建用户', 'path': '/rbac/api/users/', 'method': 'POST', 'group': user_group, 'description': '创建新用户'},
+            {'name': '获取用户详情', 'path': '/rbac/api/users/{id}/', 'method': 'GET', 'group': user_group, 'description': '获取用户详细信息'},
             {'name': '更新用户', 'path': '/rbac/api/users/{id}/', 'method': 'PUT', 'group': user_group, 'description': '更新用户信息'},
             {'name': '删除用户', 'path': '/rbac/api/users/{id}/', 'method': 'DELETE', 'group': user_group, 'description': '删除用户'},
+            {'name': '重置用户密码', 'path': '/rbac/api/users/{id}/reset-password/', 'method': 'POST', 'group': user_group, 'description': '重置用户密码'},
+            {'name': '设置用户数据权限', 'path': '/rbac/api/users/{id}/set_custom_scope/', 'method': 'POST', 'group': user_group, 'description': '设置用户自定义数据权限'},
             
             # 角色管理API
             {'name': '获取角色列表', 'path': '/rbac/api/roles/', 'method': 'GET', 'group': role_group, 'description': '获取角色列表'},
             {'name': '创建角色', 'path': '/rbac/api/roles/', 'method': 'POST', 'group': role_group, 'description': '创建新角色'},
+            {'name': '获取角色详情', 'path': '/rbac/api/roles/{id}/', 'method': 'GET', 'group': role_group, 'description': '获取角色详细信息'},
             {'name': '更新角色', 'path': '/rbac/api/roles/{id}/', 'method': 'PUT', 'group': role_group, 'description': '更新角色信息'},
             {'name': '删除角色', 'path': '/rbac/api/roles/{id}/', 'method': 'DELETE', 'group': role_group, 'description': '删除角色'},
-            {'name': '分配角色菜单', 'path': '/rbac/api/roles/{id}/assign_menus/', 'method': 'POST', 'group': role_group, 'description': '为角色分配菜单权限'},
+            {'name': '获取角色API权限', 'path': '/rbac/api/roles/{id}/get-api-permissions/', 'method': 'GET', 'group': role_group, 'description': '获取角色的API权限'},
+            {'name': '分配角色API权限', 'path': '/rbac/api/roles/{id}/assign-api-permissions/', 'method': 'POST', 'group': role_group, 'description': '为角色分配API权限'},
+            {'name': '获取角色菜单权限', 'path': '/rbac/api/roles/{id}/get-menu-permissions/', 'method': 'GET', 'group': role_group, 'description': '获取角色的菜单权限'},
+            {'name': '分配角色菜单权限', 'path': '/rbac/api/roles/{id}/assign-menu-permissions/', 'method': 'POST', 'group': role_group, 'description': '为角色分配菜单权限'},
+            
+            # 部门管理API
+            {'name': '获取部门列表', 'path': '/rbac/api/departments/', 'method': 'GET', 'group': user_group, 'description': '获取部门列表'},
+            {'name': '创建部门', 'path': '/rbac/api/departments/', 'method': 'POST', 'group': user_group, 'description': '创建新部门'},
+            {'name': '获取部门详情', 'path': '/rbac/api/departments/{id}/', 'method': 'GET', 'group': user_group, 'description': '获取部门详细信息'},
+            {'name': '更新部门', 'path': '/rbac/api/departments/{id}/', 'method': 'PUT', 'group': user_group, 'description': '更新部门信息'},
+            {'name': '删除部门', 'path': '/rbac/api/departments/{id}/', 'method': 'DELETE', 'group': user_group, 'description': '删除部门'},
+            {'name': '获取部门树', 'path': '/rbac/api/departments/tree/', 'method': 'GET', 'group': user_group, 'description': '获取部门树结构'},
+            {'name': '获取子部门', 'path': '/rbac/api/departments/{id}/children/', 'method': 'GET', 'group': user_group, 'description': '获取子部门列表'},
             
             # 权限管理API
             {'name': '获取菜单列表', 'path': '/rbac/api/menus/', 'method': 'GET', 'group': permission_group, 'description': '获取菜单列表'},
-            {'name': '获取菜单树', 'path': '/rbac/api/menus/tree/', 'method': 'GET', 'group': permission_group, 'description': '获取菜单树结构'},
-            {'name': '获取菜单路由', 'path': '/rbac/api/menus/routes/', 'method': 'GET', 'group': permission_group, 'description': '获取用户菜单路由'},
             {'name': '创建菜单', 'path': '/rbac/api/menus/', 'method': 'POST', 'group': permission_group, 'description': '创建新菜单'},
+            {'name': '获取菜单详情', 'path': '/rbac/api/menus/{id}/', 'method': 'GET', 'group': permission_group, 'description': '获取菜单详细信息'},
             {'name': '更新菜单', 'path': '/rbac/api/menus/{id}/', 'method': 'PUT', 'group': permission_group, 'description': '更新菜单信息'},
             {'name': '删除菜单', 'path': '/rbac/api/menus/{id}/', 'method': 'DELETE', 'group': permission_group, 'description': '删除菜单'},
+            {'name': '获取菜单树', 'path': '/rbac/api/menus/tree/', 'method': 'GET', 'group': permission_group, 'description': '获取菜单树结构'},
             
-            # 业务管理API
+            # API管理API
+            {'name': '获取API分组列表', 'path': '/rbac/api/api-groups/', 'method': 'GET', 'group': permission_group, 'description': '获取API分组列表'},
+            {'name': '创建API分组', 'path': '/rbac/api/api-groups/', 'method': 'POST', 'group': permission_group, 'description': '创建新API分组'},
+            {'name': '获取API分组详情', 'path': '/rbac/api/api-groups/{id}/', 'method': 'GET', 'group': permission_group, 'description': '获取API分组详细信息'},
+            {'name': '更新API分组', 'path': '/rbac/api/api-groups/{id}/', 'method': 'PUT', 'group': permission_group, 'description': '更新API分组信息'},
+            {'name': '删除API分组', 'path': '/rbac/api/api-groups/{id}/', 'method': 'DELETE', 'group': permission_group, 'description': '删除API分组'},
+            {'name': '获取API列表', 'path': '/rbac/api/apis/', 'method': 'GET', 'group': permission_group, 'description': '获取API列表'},
+            {'name': '创建API', 'path': '/rbac/api/apis/', 'method': 'POST', 'group': permission_group, 'description': '创建新API'},
+            {'name': '获取API详情', 'path': '/rbac/api/apis/{id}/', 'method': 'GET', 'group': permission_group, 'description': '获取API详细信息'},
+            {'name': '更新API', 'path': '/rbac/api/apis/{id}/', 'method': 'PUT', 'group': permission_group, 'description': '更新API信息'},
+            {'name': '删除API', 'path': '/rbac/api/apis/{id}/', 'method': 'DELETE', 'group': permission_group, 'description': '删除API'},
+            
+            # 业务管理API - 文章管理
             {'name': '获取文章列表', 'path': '/business_demo/api/articles/', 'method': 'GET', 'group': business_group, 'description': '获取文章列表'},
             {'name': '创建文章', 'path': '/business_demo/api/articles/', 'method': 'POST', 'group': business_group, 'description': '创建新文章'},
+            {'name': '获取文章详情', 'path': '/business_demo/api/articles/{id}/', 'method': 'GET', 'group': business_group, 'description': '获取文章详细信息'},
             {'name': '更新文章', 'path': '/business_demo/api/articles/{id}/', 'method': 'PUT', 'group': business_group, 'description': '更新文章信息'},
             {'name': '删除文章', 'path': '/business_demo/api/articles/{id}/', 'method': 'DELETE', 'group': business_group, 'description': '删除文章'},
+            {'name': '发布文章', 'path': '/business_demo/api/articles/{id}/publish/', 'method': 'POST', 'group': business_group, 'description': '发布文章'},
+            {'name': '查看文章', 'path': '/business_demo/api/articles/{id}/view/', 'method': 'POST', 'group': business_group, 'description': '查看文章'},
+            {'name': '我的文章', 'path': '/business_demo/api/articles/my_articles/', 'method': 'GET', 'group': business_group, 'description': '获取我的文章'},
+            {'name': '公开文章', 'path': '/business_demo/api/articles/public_articles/', 'method': 'GET', 'group': business_group, 'description': '获取公开文章'},
+            
+            # 业务管理API - 项目管理
+            {'name': '获取项目列表', 'path': '/business_demo/api/projects/', 'method': 'GET', 'group': business_group, 'description': '获取项目列表'},
+            {'name': '创建项目', 'path': '/business_demo/api/projects/', 'method': 'POST', 'group': business_group, 'description': '创建新项目'},
+            {'name': '获取项目详情', 'path': '/business_demo/api/projects/{id}/', 'method': 'GET', 'group': business_group, 'description': '获取项目详细信息'},
+            {'name': '更新项目', 'path': '/business_demo/api/projects/{id}/', 'method': 'PUT', 'group': business_group, 'description': '更新项目信息'},
+            {'name': '删除项目', 'path': '/business_demo/api/projects/{id}/', 'method': 'DELETE', 'group': business_group, 'description': '删除项目'},
+            {'name': '更新项目进度', 'path': '/business_demo/api/projects/{id}/update_progress/', 'method': 'POST', 'group': business_group, 'description': '更新项目进度'},
+            {'name': '部门项目', 'path': '/business_demo/api/projects/department_projects/', 'method': 'GET', 'group': business_group, 'description': '获取部门项目'},
+            {'name': '项目统计', 'path': '/business_demo/api/projects/statistics/', 'method': 'GET', 'group': business_group, 'description': '获取项目统计'},
+            
+            # 业务管理API - 文档管理
+            {'name': '获取文档列表', 'path': '/business_demo/api/documents/', 'method': 'GET', 'group': business_group, 'description': '获取文档列表'},
+            {'name': '创建文档', 'path': '/business_demo/api/documents/', 'method': 'POST', 'group': business_group, 'description': '创建新文档'},
+            {'name': '获取文档详情', 'path': '/business_demo/api/documents/{id}/', 'method': 'GET', 'group': business_group, 'description': '获取文档详细信息'},
+            {'name': '更新文档', 'path': '/business_demo/api/documents/{id}/', 'method': 'PUT', 'group': business_group, 'description': '更新文档信息'},
+            {'name': '删除文档', 'path': '/business_demo/api/documents/{id}/', 'method': 'DELETE', 'group': business_group, 'description': '删除文档'},
+            {'name': '下载文档', 'path': '/business_demo/api/documents/{id}/download/', 'method': 'POST', 'group': business_group, 'description': '下载文档'},
+            {'name': '按类型获取文档', 'path': '/business_demo/api/documents/by_type/', 'method': 'GET', 'group': business_group, 'description': '按类型获取文档'},
+            
+            # 业务管理API - 任务管理
+            {'name': '获取任务列表', 'path': '/business_demo/api/tasks/', 'method': 'GET', 'group': business_group, 'description': '获取任务列表'},
+            {'name': '创建任务', 'path': '/business_demo/api/tasks/', 'method': 'POST', 'group': business_group, 'description': '创建新任务'},
+            {'name': '获取任务详情', 'path': '/business_demo/api/tasks/{id}/', 'method': 'GET', 'group': business_group, 'description': '获取任务详细信息'},
+            {'name': '更新任务', 'path': '/business_demo/api/tasks/{id}/', 'method': 'PUT', 'group': business_group, 'description': '更新任务信息'},
+            {'name': '删除任务', 'path': '/business_demo/api/tasks/{id}/', 'method': 'DELETE', 'group': business_group, 'description': '删除任务'},
+            {'name': '分配任务', 'path': '/business_demo/api/tasks/{id}/assign/', 'method': 'POST', 'group': business_group, 'description': '分配任务'},
+            {'name': '完成任务', 'path': '/business_demo/api/tasks/{id}/complete/', 'method': 'POST', 'group': business_group, 'description': '完成任务'},
+            {'name': '我的任务', 'path': '/business_demo/api/tasks/my_tasks/', 'method': 'GET', 'group': business_group, 'description': '获取我的任务'},
         ]
         
         for api_data in apis_data:

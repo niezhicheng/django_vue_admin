@@ -25,12 +25,23 @@ class ApiResponseRenderer(JSONRenderer):
             
             # 成功响应
             if 200 <= status_code < 300:
-                formatted_data = {
-                    "code": ResponseCode.SUCCESS,
-                    "message": "操作成功",
-                    "data": data,
-                    "success": True
-                }
+                # 检查是否是分页数据
+                if isinstance(data, dict) and 'results' in data and 'count' in data:
+                    # 分页数据，保持原有结构
+                    formatted_data = {
+                        "code": ResponseCode.SUCCESS,
+                        "message": "操作成功",
+                        "data": data,
+                        "success": True
+                    }
+                else:
+                    # 普通数据
+                    formatted_data = {
+                        "code": ResponseCode.SUCCESS,
+                        "message": "操作成功",
+                        "data": data,
+                        "success": True
+                    }
             # 客户端错误
             elif 400 <= status_code < 500:
                 message = "操作失败"
